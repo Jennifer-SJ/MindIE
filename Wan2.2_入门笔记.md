@@ -9,8 +9,6 @@ Wan2.2 是基于 Diffusion Transformer 的视频生成模型，由阿里巴巴 W
 - **Text-to-Video (T2V)**：输入文本描述，生成对应视频
 - **Image-to-Video (I2V)**：输入图片 + 文本描述，生成视频
 
-项目根目录：`/Users/yujie/MindIE/Wan2.2/`
-
 ---
 
 ## 二、核心文件结构
