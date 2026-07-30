@@ -1,0 +1,4 @@
+549:2026-07-30 18:58:11.741+08:00 CST [27314] [281473299491392] [MindIE-SD] [DEBUG] pattern_match_pass.py:63: PatternMatchPass replace 5 patterns.
+557:2026-07-30 18:58:11.745+08:00 CST [27314] [281473299491392] [MindIE-SD] [DEBUG] mindie_sd_backend.py:120: Graph after pattern matching:
+567:2026-07-30 18:58:14.383+08:00 CST [27314] [281473299491392] [MindIE-SD] [DEBUG] pattern_match_pass.py:63: PatternMatchPass replace 5 patterns.
+575:2026-07-30 18:58:14.385+08:00 CST [27314] [281473299491392] [MindIE-SD] [DEBUG] mindie_sd_backend.py:120: Graph after pattern matching:
