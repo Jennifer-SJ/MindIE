@@ -1,0 +1,3 @@
+      2 torch.ops.npu._npu_dtype_cast.default
+      2 torch.ops.aten.split.Tensor
+      2 torch.ops.aten.add.Tensor
