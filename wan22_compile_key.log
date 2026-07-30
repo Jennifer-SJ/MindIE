@@ -1,0 +1,4 @@
+527:[2026-07-30 18:57:55,345] INFO __main__: Enabled MindieSDBackend regional compile for transformer
+528:[2026-07-30 18:57:55,357] INFO __main__: Enabled MindieSDBackend regional compile for transformer_2
+549:2026-07-30 18:58:11.741+08:00 CST [27314] [281473299491392] [MindIE-SD] [DEBUG] pattern_match_pass.py:63: PatternMatchPass replace 5 patterns.
+567:2026-07-30 18:58:14.383+08:00 CST [27314] [281473299491392] [MindIE-SD] [DEBUG] pattern_match_pass.py:63: PatternMatchPass replace 5 patterns.
