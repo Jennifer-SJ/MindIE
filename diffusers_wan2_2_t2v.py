@@ -97,7 +97,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--compile",
         action="store_true",
-        help="Compile WanTransformerBlock modules with MindieSDBackend.",
+        help="Regionally compile WanTransformerBlock modules with the selected backend.",
+    )
+    parser.add_argument(
+        "--compile-backend",
+        choices=("mindie", "torchair_ge"),
+        default="mindie",
+        help=(
+            "Regional compile backend: 'mindie' applies MindIE-SD fusion patterns; "
+            "'torchair_ge' bypasses AOT functionalization for Copy-overhead diagnosis."
+        ),
     )
     parser.add_argument(
         "--fullgraph",
@@ -131,37 +140,49 @@ def parse_args() -> argparse.Namespace:
         raise ValueError("num_inference_steps must be greater than 0")
     if args.warmup_inference_steps < 0:
         raise ValueError("warmup_inference_steps must not be negative")
+    if not args.compile and args.compile_backend != "mindie":
+        raise ValueError("--compile-backend requires --compile")
+    if args.disable_compile_pattern and args.compile_backend != "mindie":
+        raise ValueError("--disable-compile-pattern is only supported by the mindie backend")
     return args
 
 
-def enable_mindie_compile(
+def enable_regional_compile(
     pipe: WanPipeline,
     fullgraph: bool,
+    backend_name: str,
     disabled_patterns: list[str],
 ) -> None:
-    """为 Wan2.2 的两个 Transformer Block 使能 MindIE-SD 区域编译。
+    """为 Wan2.2 的两个 Transformer Block 使能区域编译。
 
     ``compile_repeated_blocks`` 不编译整个 Pipeline，只编译模型里反复出现的
-    ``WanTransformerBlock``。真正的图捕获和融合算子替换发生在第一次 forward，
+    ``WanTransformerBlock``。MindIE-SD 后端执行 Pattern 融合；torchair GE 后端
+    用于验证绕过 AOT functionalization 后能否消除 Copy 膨胀。
+    两种后端的首次图捕获都发生在第一次 forward，
     所以后面的 warmup 是 compile 验证中不可省略的一步。
     """
-    from mindiesd.compilation import MindieSDBackend
-    from mindiesd.compilation.compiliation_config import CompilationConfig
+    if backend_name == "torchair_ge":
+        from torch_npu.dynamo.torchair import get_npu_backend
 
-    patterns_to_disable = set(disabled_patterns)
-    if "all" in patterns_to_disable:
-        patterns_to_disable = set(COMPILE_PATTERN_NAMES)
-    for pattern_name in patterns_to_disable:
-        config_name = "enable_%s" % pattern_name
-        setattr(CompilationConfig.fusion_patterns, config_name, False)
-    logger.info(
-        "Disabled MindIE-SD fusion patterns: %s",
-        ", ".join(sorted(patterns_to_disable)) if patterns_to_disable else "none",
-    )
+        backend = get_npu_backend()
+        logger.info("Using torchair GE regional compile backend")
+    else:
+        from mindiesd.compilation import MindieSDBackend
+        from mindiesd.compilation.compiliation_config import CompilationConfig
 
-    backend = MindieSDBackend()
+        patterns_to_disable = set(disabled_patterns)
+        if "all" in patterns_to_disable:
+            patterns_to_disable = set(COMPILE_PATTERN_NAMES)
+        for pattern_name in patterns_to_disable:
+            config_name = "enable_%s" % pattern_name
+            setattr(CompilationConfig.fusion_patterns, config_name, False)
+        logger.info(
+            "Disabled MindIE-SD fusion patterns: %s",
+            ", ".join(sorted(patterns_to_disable)) if patterns_to_disable else "none",
+        )
+        backend = MindieSDBackend()
     # Wan2.2 在高噪声阶段使用 transformer，在低噪声阶段使用 transformer_2。
-    # 两个模型都要进入 MindieSDBackend，否则只能加速其中一部分去噪步骤。
+    # 两个模型都要进入所选后端，否则只能编译其中一部分去噪步骤。
     for module_name in ("transformer", "transformer_2"):
         transformer = getattr(pipe, module_name, None)
         if transformer is None:
@@ -179,7 +200,7 @@ def enable_mindie_compile(
             # guard 和重复编译干扰，让 baseline/compile 对比更容易解释。
             dynamic=False,
         )
-        logger.info("Enabled MindieSDBackend regional compile for %s", module_name)
+        logger.info("Enabled %s regional compile for %s", backend_name, module_name)
 
 
 def load_pipeline(args: argparse.Namespace, device: str) -> WanPipeline:
@@ -214,7 +235,12 @@ def load_pipeline(args: argparse.Namespace, device: str) -> WanPipeline:
     # 先标记需要编译的 Block，再安装 CPU offload hook。这样编译只关注 Block 的
     # 张量计算，不需要把 Accelerate 的模型搬运逻辑一起捕获到计算图中。
     if args.compile:
-        enable_mindie_compile(pipe, args.fullgraph, args.disable_compile_pattern)
+        enable_regional_compile(
+            pipe,
+            args.fullgraph,
+            args.compile_backend,
+            args.disable_compile_pattern,
+        )
 
     # model CPU offload 以“完整组件”为粒度搬运模型。
     # 当前需要执行哪个组件时，Accelerate 将它从 CPU 搬到 NPU；
